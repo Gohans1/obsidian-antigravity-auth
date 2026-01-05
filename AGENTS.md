@@ -638,3 +638,253 @@ Account 1 (Antigravity) → 429 → Account 1 (Gemini CLI) → 429 → Account 2
 - `src/plugin/accounts.ts` → `getAvailableHeaderStyle()`
 - `src/plugin.ts` → quota fallback logic (L1135-L1156)
 - `src/constants.ts` → `GEMINI_CLI_HEADERS`
+
+---
+
+## 🔧 GEMINI CLI QUOTA - COMPLETE IMPLEMENTATION GUIDE
+
+> **TRIGGER:** When user says "Cài gemini cli quota" or "Add Gemini CLI quota", follow this guide.
+
+### FIXED CONSTANTS (DO NOT CHANGE)
+
+These values are **CRITICAL** and must be used EXACTLY as shown:
+
+```typescript
+// Gemini CLI Headers - FIXED, DO NOT MODIFY
+export const GEMINI_CLI_HEADERS = {
+  "User-Agent": "google-api-nodejs-client/9.15.1",
+  "X-Goog-Api-Client": "gl-node/22.17.0", 
+  "Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
+} as const;
+
+// Antigravity Headers - ALREADY IN PROJECT (types/index.ts)
+// User-Agent: "antigravity/1.11.5 windows/amd64"
+// X-Goog-Api-Client: "google-cloud-sdk vscode_cloudshelleditor/0.1"
+
+// Endpoint - SAME for both quota types
+// Production: "https://cloudcode-pa.googleapis.com"
+// Daily: "https://daily-cloudcode-pa.sandbox.googleapis.com"
+```
+
+### STEP-BY-STEP IMPLEMENTATION
+
+#### Step 1: Update Types (`types/index.ts`)
+
+```typescript
+// ADD this new constant
+export const GEMINI_CLI_HEADERS = {
+  "User-Agent": "google-api-nodejs-client/9.15.1",
+  "X-Goog-Api-Client": "gl-node/22.17.0",
+  "Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
+} as const;
+
+// ADD this type
+export type HeaderStyle = "antigravity" | "gemini-cli";
+
+// MODIFY GoogleAccount interface
+export interface GoogleAccount {
+  email: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  projectId: string;
+  status: AccountStatus;
+  lastUsed: number;
+  // CHANGE: from single rateLimitExpiry to per-quota tracking
+  rateLimits?: {
+    antigravity?: { expiry: number };
+    geminiCli?: { expiry: number };
+  };
+}
+```
+
+#### Step 2: Update AccountManager (`account/AccountManager.ts`)
+
+```typescript
+// ADD new methods
+isRateLimitedForStyle(account: GoogleAccount, style: HeaderStyle): boolean {
+  const limits = account.rateLimits;
+  if (!limits) return false;
+  
+  const quota = style === "antigravity" ? limits.antigravity : limits.geminiCli;
+  if (!quota) return false;
+  
+  if (quota.expiry > Date.now()) return true;
+  
+  // Clear expired
+  if (style === "antigravity") delete limits.antigravity;
+  else delete limits.geminiCli;
+  return false;
+}
+
+markRateLimitedForStyle(email: string, style: HeaderStyle, durationMs: number): void {
+  const account = this.accounts.get(email);
+  if (!account) return;
+  
+  if (!account.rateLimits) account.rateLimits = {};
+  
+  if (style === "antigravity") {
+    account.rateLimits.antigravity = { expiry: Date.now() + durationMs };
+  } else {
+    account.rateLimits.geminiCli = { expiry: Date.now() + durationMs };
+  }
+  this.persistAccounts();
+}
+
+getAvailableHeaderStyle(account: GoogleAccount): HeaderStyle | null {
+  // Try Antigravity first (preferred)
+  if (!this.isRateLimitedForStyle(account, "antigravity")) {
+    return "antigravity";
+  }
+  // Fallback to Gemini CLI
+  if (!this.isRateLimitedForStyle(account, "gemini-cli")) {
+    return "gemini-cli";
+  }
+  return null; // Both rate limited
+}
+```
+
+#### Step 3: Update ResilienceEngine (`account/ResilienceEngine.ts`)
+
+```typescript
+// MODIFY executeWithRetry to try both quota types before rotating
+async executeWithRetry<T>(
+  requestFn: (account: GoogleAccount, headerStyle: HeaderStyle) => Promise<RequestResult<T>>
+): Promise<RequestResult<T>> {
+  let attemptCount = 0;
+
+  while (attemptCount < this.maxRetries) {
+    const account = this.accountManager.getActiveAccount();
+    if (!account) {
+      return { success: false, error: new Error('No active accounts available') };
+    }
+
+    // Get available header style for this account
+    const headerStyle = this.accountManager.getAvailableHeaderStyle(account);
+    if (!headerStyle) {
+      // Both quotas exhausted, try next account
+      const next = this.accountManager.rotateToNextAccount();
+      if (!next) {
+        return { success: false, error: new Error('All accounts rate limited') };
+      }
+      continue;
+    }
+
+    attemptCount++;
+    const result = await requestFn(account, headerStyle);
+
+    if (result.success) {
+      return result;
+    }
+
+    if (result.statusCode === 429) {
+      const retryAfter = result.retryAfter || 60000;
+      // Mark THIS quota type as rate limited
+      this.accountManager.markRateLimitedForStyle(account.email, headerStyle, retryAfter);
+      // Don't rotate yet - let loop try other quota type
+      continue;
+    }
+
+    // Non-retryable error
+    return result;
+  }
+  
+  return { success: false, error: new Error('Max retries exceeded') };
+}
+```
+
+#### Step 4: Update ProxyServer (`proxy/ProxyServer.ts`)
+
+```typescript
+// MODIFY makeAntigravityRequest to accept headerStyle parameter
+private makeAntigravityRequest(
+  account: GoogleAccount, 
+  requestBody: any, 
+  headerStyle: HeaderStyle,  // NEW PARAM
+  isStreaming: boolean
+): Promise<...> {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${account.accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  // USE appropriate headers based on style
+  if (headerStyle === "gemini-cli") {
+    headers['User-Agent'] = GEMINI_CLI_HEADERS['User-Agent'];
+    headers['X-Goog-Api-Client'] = GEMINI_CLI_HEADERS['X-Goog-Api-Client'];
+    headers['Client-Metadata'] = GEMINI_CLI_HEADERS['Client-Metadata'];
+  } else {
+    headers['User-Agent'] = ANTIGRAVITY_CONFIG.userAgent;
+    headers['X-Goog-Api-Client'] = ANTIGRAVITY_CONFIG.apiClient;
+  }
+  
+  // ... rest of request logic
+}
+```
+
+### GOTCHAS & TIPS
+
+1. **Claude models = Antigravity ONLY**
+   ```typescript
+   // Claude doesn't exist on Gemini CLI quota
+   if (model.includes('claude')) {
+     // Force antigravity, no fallback
+     headerStyle = "antigravity";
+   }
+   ```
+
+2. **Same endpoint, different headers**
+   - Both quota types use the SAME API endpoint
+   - Only the headers differ (User-Agent, X-Goog-Api-Client)
+
+3. **Rate limits are PER-MODEL-FAMILY**
+   - NoeFabris tracks rate limits per model (e.g., `gemini-3-pro` vs `gemini-3-flash`)
+   - Start simple: track per quota type only, add per-model later if needed
+
+4. **Don't break existing behavior**
+   - If Gemini CLI quota fails, DON'T crash
+   - Fallback gracefully to account rotation
+
+5. **Migration: Handle old account format**
+   ```typescript
+   // Old accounts have rateLimitExpiry (single number)
+   // New accounts have rateLimits (object)
+   if (typeof account.rateLimitExpiry === 'number') {
+     // Migrate to new format
+     account.rateLimits = { 
+       antigravity: { expiry: account.rateLimitExpiry } 
+     };
+     delete account.rateLimitExpiry;
+   }
+   ```
+
+### TESTING CHECKLIST
+
+After implementation, verify:
+
+- [ ] Single account: Antigravity 429 → tries Gemini CLI → success
+- [ ] Single account: Both 429 → returns "rate limited" error
+- [ ] Multi-account: Account 1 both 429 → rotates to Account 2
+- [ ] Claude models: NEVER uses Gemini CLI (antigravity only)
+- [ ] Old accounts (with `rateLimitExpiry`) still work after migration
+- [ ] Settings tab shows correct status for both quota types
+- [ ] Console logs indicate which quota type is being used
+
+### REFERENCE FILES IN NoeFabris REPO
+
+| What | File | Function |
+|------|------|----------|
+| Header definitions | `src/constants.ts` | `GEMINI_CLI_HEADERS` |
+| Quota key logic | `src/plugin/accounts.ts` | `getQuotaKey()` |
+| Available style check | `src/plugin/accounts.ts` | `getAvailableHeaderStyle()` |
+| Rate limit tracking | `src/plugin/accounts.ts` | `isRateLimitedForHeaderStyle()` |
+| Fallback logic | `src/plugin.ts` | Lines 1135-1156 |
+| Model routing | `src/plugin/transform/model-resolver.ts` | `resolveModel()` |
+
+### CONSOLE LOG FORMAT (for debugging)
+
+```typescript
+console.log('[Proxy] Using quota:', headerStyle, 'for account:', account.email);
+console.log('[Proxy] Antigravity quota rate limited, trying Gemini CLI...');
+console.log('[Proxy] Both quotas exhausted for', account.email, ', rotating...');
+```
