@@ -1,0 +1,24 @@
+# bv (beads viewer) local config and caches
+.bv/
+
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lock files
+bun.lock
+package-lock.json
+
+# Environment
+.env
+.env.local

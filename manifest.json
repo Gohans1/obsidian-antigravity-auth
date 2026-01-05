@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-antigravity-auth",
+  "name": "Antigravity Auth",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Bridge Obsidian Copilot with Google's Antigravity API for free Gemini & Claude access",
+  "author": "Gohans",
+  "authorUrl": "https://github.com/gohans",
+  "isDesktopOnly": true
+}
