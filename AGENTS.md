@@ -584,3 +584,57 @@ cp main.js manifest.json <vault>/.obsidian/plugins/obsidian-antigravity-auth/
 | v1.0.0-working | 2026-01-06 | ✅ WORKING | First fully working version. All features functional. |
 
 **Git Tag:** `v1.0.0-working` - Use this to revert if things break!
+
+---
+
+## 🚧 MISSING FEATURES (vs NoeFabris repo)
+
+### Gemini CLI Dual Quota System - NOT IMPLEMENTED
+
+**What it is:** NoeFabris repo has a "Dual Quota System" that doubles effective quota for Gemini models by using BOTH Antigravity quota AND Gemini CLI quota per account.
+
+**Current behavior (this plugin):**
+```
+Account 1 (Antigravity) → 429 → Account 2 (Antigravity) → 429 → ERROR
+```
+
+**NoeFabris behavior:**
+```
+Account 1 (Antigravity) → 429 → Account 1 (Gemini CLI) → 429 → Account 2 (Antigravity) → 429 → Account 2 (Gemini CLI) → Success!
+```
+
+**Feature comparison:**
+
+| Feature             | NoeFabris repo | This plugin  |
+|---------------------|----------------|--------------|
+| Account rotation    | ✅             | ✅           |
+| Antigravity quota   | ✅             | ✅           |
+| Gemini CLI quota    | ✅             | ❌ NOT IMPLEMENTED |
+| Dual quota fallback | ✅             | ❌ NOT IMPLEMENTED |
+
+**To implement this, you would need:**
+1. Add Gemini CLI headers to `types/index.ts`:
+   ```typescript
+   export const GEMINI_CLI_HEADERS = {
+     "User-Agent": "google-api-nodejs-client/9.15.1",
+     "X-Goog-Api-Client": "gl-node/22.17.0",
+     "Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
+   };
+   ```
+2. Modify `GoogleAccount` type to track separate rate limits:
+   ```typescript
+   rateLimits?: {
+     antigravity?: { expiry: number };
+     geminiCli?: { expiry: number };
+   };
+   ```
+3. Modify `AccountManager` to track 2 quota types separately
+4. Modify `ResilienceEngine` to try Gemini CLI quota before rotating account
+5. Modify `ProxyServer` to use appropriate headers based on quota type
+
+**Estimated effort:** 200-300 lines of code changes
+
+**Reference:** See NoeFabris repo files:
+- `src/plugin/accounts.ts` → `getAvailableHeaderStyle()`
+- `src/plugin.ts` → quota fallback logic (L1135-L1156)
+- `src/constants.ts` → `GEMINI_CLI_HEADERS`

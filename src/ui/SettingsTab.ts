@@ -158,19 +158,27 @@ export class AntigravitySettingsTab extends PluginSettingTab {
           await this.callbacks.onSettingsChange(this.settings);
         }));
 
-    new Setting(containerEl)
-      .setName('Default Model')
-      .setDesc('Model to use when none is specified')
-      .addDropdown(dropdown => {
-        for (const model of AVAILABLE_MODELS) {
-          dropdown.addOption(model.id, model.name);
-        }
-        dropdown.setValue(this.settings.defaultModel);
-        dropdown.onChange(async (value) => {
-          this.settings.defaultModel = value;
-          await this.callbacks.onSettingsChange(this.settings);
-        });
-      });
+    // Available Models Reference (for Copilot configuration)
+    containerEl.createEl('h3', { text: 'Available Models' });
+    const modelTable = containerEl.createEl('table');
+    modelTable.style.cssText = 'width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 0.9em;';
+    
+    const headerRow = modelTable.createEl('tr');
+    headerRow.createEl('th', { text: 'Model ID (use in Copilot)' }).style.cssText = 'text-align: left; padding: 5px; border-bottom: 1px solid var(--background-modifier-border);';
+    headerRow.createEl('th', { text: 'Description' }).style.cssText = 'text-align: left; padding: 5px; border-bottom: 1px solid var(--background-modifier-border);';
+    
+    for (const model of AVAILABLE_MODELS) {
+      const row = modelTable.createEl('tr');
+      const idCell = row.createEl('td');
+      idCell.style.cssText = 'padding: 4px 5px; font-family: monospace; font-size: 0.85em;';
+      const code = idCell.createEl('code', { text: model.id });
+      code.style.cssText = 'background: var(--background-secondary); padding: 2px 5px; border-radius: 3px; cursor: pointer;';
+      code.onclick = () => {
+        navigator.clipboard.writeText(model.id);
+        new Notice(`Copied: ${model.id}`);
+      };
+      row.createEl('td', { text: model.name }).style.cssText = 'padding: 4px 5px;';
+    }
 
     new Setting(containerEl)
       .setName('Auto-start Proxy')
