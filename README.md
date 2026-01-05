@@ -8,6 +8,17 @@ Use **Gemini 3** and **Claude** models for FREE in [Obsidian Copilot](https://gi
 
 ### Step 1: Install Plugin
 
+#### Option A: BRAT (Recommended)
+
+1. Install [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) from Community Plugins
+2. Open BRAT settings → Click "Add Beta Plugin"
+3. Enter: `Gohans1/obsidian-antigravity-auth`
+4. Click "Add Plugin" → Enable in Settings
+
+> **Note:** Requires a [GitHub Release](https://github.com/Gohans1/obsidian-antigravity-auth/releases) with `main.js` and `manifest.json`.
+
+#### Option B: Manual Installation
+
 Download `main.js` and `manifest.json` → Copy to `<vault>/.obsidian/plugins/obsidian-antigravity-auth/` → Enable in Settings.
 
 ### Step 2: Add Google Account

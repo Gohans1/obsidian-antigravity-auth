@@ -136,6 +136,67 @@ bun run version          # Auto-update manifest.json + versions.json
 cp main.js manifest.json <vault>/.obsidian/plugins/obsidian-antigravity-auth/
 ```
 
+## BRAT INSTALLATION SUPPORT
+
+### How BRAT Works with This Plugin
+
+BRAT (Beta Reviewers Auto-update Tool) cho phép user install plugin trực tiếp từ GitHub repo.
+
+**⚠️ BRAT v1.1.0+ YÊU CẦU GITHUB RELEASES:**
+- BRAT không download từ main branch nữa
+- PHẢI tạo GitHub Release với assets: `main.js`, `manifest.json`
+- Version trong manifest.json PHẢI khớp với release tag
+
+**Requirements for BRAT to work:**
+1. `manifest.json` phải có trong release assets
+2. `main.js` phải có trong release assets
+3. Repo phải public
+4. Release tag phải khớp với version trong manifest.json
+
+**Repo URL cho BRAT:** `Gohans1/obsidian-antigravity-auth`
+
+### Release Workflow
+
+Khi release version mới:
+
+1. **Bump version:**
+   ```bash
+   bun run version
+   ```
+   
+2. **Build production:**
+   ```bash
+   bun run build
+   ```
+   
+3. **Commit và push:**
+   ```bash
+   git add -A
+   git commit -m "Release vX.Y.Z"
+   git push
+   ```
+
+4. **Create GitHub Release (REQUIRED for BRAT):**
+   ```bash
+   gh release create vX.Y.Z main.js manifest.json --title "vX.Y.Z" --notes "Release notes"
+   ```
+
+**Note:** BRAT v1.1.0+ **CHỈ** download từ GitHub Releases, không từ main branch.
+
+### BRAT vs Manual Installation
+
+| Method | Pros | Cons |
+|--------|------|------|
+| **BRAT** | Auto-update, easy install | Requires BRAT plugin + GitHub Release |
+| **Manual** | No dependencies | Manual updates |
+
+### If BRAT Fails to Install
+
+1. Check repo is public
+2. Check GitHub Release exists với đúng assets
+3. Check version trong manifest.json khớp với release tag
+4. Restart Obsidian and try again
+
 ## CRITICAL NOTES
 
 ### OAuth Credentials

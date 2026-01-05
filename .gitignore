@@ -4,8 +4,8 @@
 # Dependencies
 node_modules/
 
-# Build output
-main.js
+# Build output (NOT ignored - needed for BRAT beta releases)
+# main.js
 
 # IDE
 .vscode/
